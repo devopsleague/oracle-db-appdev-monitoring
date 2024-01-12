@@ -8,6 +8,8 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"runtime/debug"
+	"time"
 
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
@@ -21,7 +23,7 @@ import (
 	"github.com/prometheus/common/promlog/flag"
 
 	// Required for debugging
-	// _ "net/http/pprof"
+	_ "net/http/pprof"
 
 	"github.com/oracle/oracle-db-appdev-monitoring/collector"
 	"github.com/oracle/oracle-db-appdev-monitoring/vault"
@@ -92,6 +94,24 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("<html><head><title>Oracle DB Exporter " + Version + "</title></head><body><h1>Oracle DB Exporter " + Version + "</h1><p><a href='" + *metricPath + "'>Metrics</a></p></body></html>"))
 	})
+
+	// start a ticker to cause rebirth
+	ticker := time.NewTicker(time.Minute * 10)
+	defer ticker.Stop()
+
+	go func() {
+		for {
+			<-ticker.C
+			level.Info(logger).Log("msg", "Attempting to free OS memory...")
+			debug.FreeOSMemory()
+		}
+		// level.Info(logger).Log("msg", "Restarting the universe...")
+		// executable, _ := os.Executable()
+		// execErr := syscall.Exec(executable, os.Args, os.Environ())
+		// if execErr != nil {
+		// 	panic(execErr)
+		// }
+	}()
 
 	server := &http.Server{}
 	if err := web.ListenAndServe(server, toolkitFlags, logger); err != nil {
