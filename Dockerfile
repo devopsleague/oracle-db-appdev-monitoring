@@ -5,7 +5,7 @@ ARG GOOS
 ENV GOOS ${GOOS:-linux}
 
 ARG GOARCH
-ENV GOARCH ${GOARCH:-amd64}
+ENV GOARCH ${TARGETARCH:-amd64}
 
 RUN microdnf install wget gzip gcc && \
     wget -q https://go.dev/dl/go1.22.7.${GOOS}-${GOARCH}.tar.gz && \
