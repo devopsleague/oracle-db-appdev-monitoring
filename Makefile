@@ -89,7 +89,7 @@ docker-arm:
 	docker build --no-cache --progress=plain $(BUILD_ARGS) -t "$(IMAGE_ID)" --build-arg BASE_IMAGE=$(ORACLE_LINUX_BASE_IMAGE) --build-arg GOARCH=arm64 . 
 
 docker-multi-arch:
-	docker buildx build --platform linux/amd64,linux/arm64 --no-cache --progress=plain -t "$(IMAGE_ID)" --build-arg BASE_IMAGE=$(ORACLE_LINUX_BASE_IMAGE) . 
+	docker buildx build --platform linux/amd64,linux/arm64 --no-cache --progress=plain --load -t "$(IMAGE_ID)" --build-arg BASE_IMAGE=$(ORACLE_LINUX_BASE_IMAGE) . 
 
 push-oraclelinux-image:
 	docker push $(IMAGE_ID)
