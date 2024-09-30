@@ -12,6 +12,7 @@ OUTDIR          = ./dist
 IMAGE_NAME     ?= container-registry.oracle.com/database/observability-exporter
 IMAGE_ID       ?= $(IMAGE_NAME):$(VERSION)
 IMAGE_ID_LATEST?= $(IMAGE_NAME):latest
+FINAL_ID       ?= $(shell env FINAL_ID)
 
 ORACLE_LINUX_BASE_IMAGE ?= ghcr.io/oracle/oraclelinux:8-slim
 
@@ -90,6 +91,7 @@ docker-arm:
 
 docker-multi-arch:
 	docker buildx build --platform linux/amd64,linux/arm64 --no-cache --progress=plain --output type=image -t "$(IMAGE_ID)" --build-arg BASE_IMAGE=$(ORACLE_LINUX_BASE_IMAGE) . 
+	docker buildx imagetools create -t $(FINAL_ID) $(IMAGE_ID)
 
 push-oraclelinux-image:
 	docker push $(IMAGE_ID)
