@@ -25,16 +25,18 @@ type LogRecord struct {
 
 var queryFailures int = 0
 
-func UpdateLog(logDestination string, logger log.Logger, db *sql.DB) {
+// UpdateLog returns false if there are three failures, to let the calling func
+// know that it should stop the ticker
+func UpdateLog(logDestination string, logger log.Logger, db *sql.DB) bool {
 
 	if queryFailures == 3 {
 		level.Info(logger).Log("msg", "Failed to query the alert log three consecutive times, so will not try any more")
 		queryFailures++
-		return
+		return true
 	}
 
 	if queryFailures > 3 {
-		return
+		return false
 	}
 
 	// check if the log file exists, and if not, create it
@@ -43,7 +45,7 @@ func UpdateLog(logDestination string, logger log.Logger, db *sql.DB) {
 		f, e := os.Create(logDestination)
 		if e != nil {
 			level.Error(logger).Log("msg", "Failed to create the log file: "+logDestination)
-			return
+			return true
 		}
 		f.Close()
 	}
@@ -53,7 +55,7 @@ func UpdateLog(logDestination string, logger log.Logger, db *sql.DB) {
 
 	if err != nil {
 		level.Error(logger).Log("msg", "Could not open the alert log destination file: "+logDestination)
-		return
+		return true
 	}
 
 	// create an empty line
@@ -102,7 +104,7 @@ func UpdateLog(logDestination string, logger log.Logger, db *sql.DB) {
 	err = json.Unmarshal([]byte(line), &lastLogRecord)
 	if err != nil {
 		level.Error(logger).Log("msg", "Could not parse last line of log file")
-		return
+		return true
 	}
 
 	// query for any new alert log entries
@@ -114,7 +116,7 @@ func UpdateLog(logDestination string, logger log.Logger, db *sql.DB) {
 	if err != nil {
 		level.Error(logger).Log("msg", "Error querying the alert logs")
 		queryFailures++
-		return
+		return true
 	}
 	defer rows.Close()
 
@@ -122,7 +124,7 @@ func UpdateLog(logDestination string, logger log.Logger, db *sql.DB) {
 	outfile, err := os.OpenFile(logDestination, os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		level.Error(logger).Log("msg", "Could not open log file for writing: "+logDestination)
-		return
+		return true
 	}
 	defer outfile.Close()
 
@@ -131,7 +133,7 @@ func UpdateLog(logDestination string, logger log.Logger, db *sql.DB) {
 		var newRecord LogRecord
 		if err := rows.Scan(&newRecord.Timestamp, &newRecord.ModuleId, &newRecord.ECID, &newRecord.Message); err != nil {
 			level.Error(logger).Log("msg", "Error reading a row from the alert logs")
-			return
+			return true
 		}
 
 		// strip the newline from end of message
@@ -140,12 +142,12 @@ func UpdateLog(logDestination string, logger log.Logger, db *sql.DB) {
 		jsonLogRecord, err := json.Marshal(newRecord)
 		if err != nil {
 			level.Error(logger).Log("msg", "Error marshalling alert log record")
-			return
+			return true
 		}
 
 		if _, err = outfile.WriteString(string(jsonLogRecord) + "\n"); err != nil {
 			level.Error(logger).Log("msg", "Could not write to log file: "+logDestination)
-			return
+			return true
 		}
 	}
 
@@ -153,4 +155,5 @@ func UpdateLog(logDestination string, logger log.Logger, db *sql.DB) {
 		level.Error(logger).Log("msg", "Error querying the alert logs")
 		queryFailures++
 	}
+	return true
 }

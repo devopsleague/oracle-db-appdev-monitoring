@@ -89,7 +89,7 @@ func main() {
 		ConnectString:      connectString,
 		DbRole:             dbrole,
 		ConfigDir:          tnsadmin,
-		ExternalAuth:		externalAuth,
+		ExternalAuth:       externalAuth,
 		MaxOpenConns:       *maxOpenConns,
 		MaxIdleConns:       *maxIdleConns,
 		CustomMetrics:      *customMetrics,
@@ -173,7 +173,10 @@ func main() {
 			for {
 				<-logTicker.C
 				level.Debug(logger).Log("msg", "updating alert log")
-				alertlog.UpdateLog(*logDestination, logger, exporter.GetDB())
+				more := alertlog.UpdateLog(*logDestination, logger, exporter.GetDB())
+				if !more {
+					logTicker.Stop()
+				}
 			}
 		}()
 	}
