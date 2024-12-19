@@ -387,9 +387,9 @@ func (e *Exporter) connect() error {
 		e.user = ""
 	}
 	level.Info(e.logger).Log("msg", msg)
-	var extAuth sql.NullBool
-	extAuth.Bool = e.externalAuth
-	P.Username, P.Password, P.ConnectString, P.ExternalAuth = e.user, godror.NewPassword(e.password), e.connectString, extAuth
+	// var extAuth sql.NullBool
+	// extAuth.Bool = e.externalAuth
+	P.Username, P.Password, P.ConnectString, P.ExternalAuth = e.user, godror.NewPassword(e.password), e.connectString, e.externalAuth
 
 	// if TNS_ADMIN env var is set, set ConfigDir to that location
 	P.ConfigDir = e.configDir
