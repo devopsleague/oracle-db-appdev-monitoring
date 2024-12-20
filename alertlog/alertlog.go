@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/go-kit/log"
@@ -28,6 +29,8 @@ var queryFailures int = 0
 // UpdateLog returns false if there are three failures, to let the calling func
 // know that it should stop the ticker
 func UpdateLog(logDestination string, logger log.Logger, db *sql.DB) bool {
+
+	level.Debug(logger).Log("msg", "queryFailures = "+strconv.FormatInt(int64(queryFailures), 10))
 
 	if queryFailures == 3 {
 		level.Info(logger).Log("msg", "Failed to query the alert log three consecutive times, so will not try any more")
