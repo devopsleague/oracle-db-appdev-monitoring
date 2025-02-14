@@ -422,24 +422,24 @@ func (e *Exporter) connect() error {
 	level.Debug(e.logger).Log("msg", "Successfully configured connection to "+maskDsn(e.connectString))
 	e.db = db
 
-	if _, err := db.Exec(`
-			begin
-	       		dbms_application_info.set_client_info('oracledb_exporter');
-			end;`); err != nil {
-		level.Info(e.logger).Log("msg", "Could not set CLIENT_INFO.")
-	}
+	// if _, err := db.Exec(`
+	// 		begin
+	//        		dbms_application_info.set_client_info('oracledb_exporter');
+	// 		end;`); err != nil {
+	// 	level.Info(e.logger).Log("msg", "Could not set CLIENT_INFO.")
+	// }
 
-	var result int
-	if err := db.QueryRow("select sys_context('USERENV', 'CON_ID') from dual").Scan(&result); err != nil {
-		level.Info(e.logger).Log("msg", "dbtype err ="+string(err.Error()))
-	}
-	e.dbtype = result
+	// var result int
+	// if err := db.QueryRow("select sys_context('USERENV', 'CON_ID') from dual").Scan(&result); err != nil {
+	// 	level.Info(e.logger).Log("msg", "dbtype err ="+string(err.Error()))
+	// }
+	// e.dbtype = result
 
-	var sysdba string
-	if err := db.QueryRow("select sys_context('USERENV', 'ISDBA') from dual").Scan(&sysdba); err != nil {
-		level.Info(e.logger).Log("msg", "got error checking my database role")
-	}
-	level.Info(e.logger).Log("msg", "Connected as SYSDBA? "+sysdba)
+	// var sysdba string
+	// if err := db.QueryRow("select sys_context('USERENV', 'ISDBA') from dual").Scan(&sysdba); err != nil {
+	// 	level.Info(e.logger).Log("msg", "got error checking my database role")
+	// }
+	// level.Info(e.logger).Log("msg", "Connected as SYSDBA? "+sysdba)
 
 	return nil
 }
