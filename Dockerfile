@@ -24,7 +24,7 @@ ENV VERSION=${VERSION:-1.0.0}
 
 RUN CGO_ENABLED=1 GOOS=${GOOS} GOARCH=${GOARCH} go build -v -ldflags "-X main.Version=${VERSION} -s -w"
 
-FROM ${BASE_IMAGE:-ghcr.io/oracle/oraclelinux:8-slim} AS exporter
+FROM ${BASE_IMAGE:-ghcr.io/oracle/oraclelinux:9-slim} AS exporter
 LABEL org.opencontainers.image.authors="Oracle America, Inc."
 LABEL org.opencontainers.image.description="Oracle Database Observability Exporter"
 

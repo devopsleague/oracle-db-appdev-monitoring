@@ -23,7 +23,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/godror/godror"
-	"github.com/godror/godror/dsn"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -55,7 +54,7 @@ type Config struct {
 	User               string
 	Password           string
 	ConnectString      string
-	DbRole             dsn.AdminRole
+	DbRole             string
 	ConfigDir          string
 	ExternalAuth       bool
 	MaxIdleConns       int
@@ -102,13 +101,6 @@ var (
 	namespace         = "oracledb"
 	exporterName      = "exporter"
 )
-
-// ScrapResult is container structure for error handling
-type ScrapeResult struct {
-	Err         error
-	Metric      Metric
-	ScrapeStart time.Time
-}
 
 func maskDsn(dsn string) string {
 	parts := strings.Split(dsn, "@")
@@ -283,26 +275,33 @@ func (e *Exporter) scheduledScrape(tick *time.Time) {
 
 func (e *Exporter) scrape(ch chan<- prometheus.Metric, tick *time.Time) {
 	e.totalScrapes.Inc()
-	errChan := make(chan error, len(e.metricsToScrape.Metric))
-	begun := time.Now()
+	var err error
+	var errmutex sync.Mutex
 
-	if connectionError := e.db.Ping(); connectionError != nil {
-		level.Debug(e.logger).Log("msg", "error = "+connectionError.Error())
-		if strings.Contains(connectionError.Error(), "sql: database is closed") {
+	defer func(begun time.Time) {
+		e.duration.Set(time.Since(begun).Seconds())
+		if err == nil {
+			e.error.Set(0)
+		} else {
+			e.error.Set(1)
+		}
+	}(time.Now())
+
+	if err = e.db.Ping(); err != nil {
+		level.Debug(e.logger).Log("msg", "error = "+err.Error())
+		if strings.Contains(err.Error(), "sql: database is closed") {
 			level.Info(e.logger).Log("msg", "Reconnecting to DB")
-			connectionError = e.connect()
-			if connectionError != nil {
-				level.Error(e.logger).Log("msg", "Error reconnecting to DB", connectionError)
+			err = e.connect()
+			if err != nil {
+				level.Error(e.logger).Log("msg", "Error reconnecting to DB", err)
 			}
 		}
 	}
 
-	if pingError := e.db.Ping(); pingError != nil {
+	if err = e.db.Ping(); err != nil {
 		level.Error(e.logger).Log("msg", "Error pinging oracle",
-			"error", pingError)
+			"error", err)
 		e.up.Set(0)
-		e.error.Set(1)
-		e.duration.Set(time.Since(begun).Seconds())
 		return
 	}
 
@@ -315,10 +314,15 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric, tick *time.Time) {
 		e.reloadMetrics()
 	}
 
+	wg := sync.WaitGroup{}
+
 	for _, metric := range e.metricsToScrape.Metric {
+		wg.Add(1)
 		metric := metric //https://golang.org/doc/faq#closures_and_goroutines
 
 		go func() {
+			defer wg.Done()
+
 			level.Debug(e.logger).Log("msg", "About to scrape metric",
 				"Context", metric.Context,
 				"MetricsDesc", fmt.Sprint(metric.MetricsDesc),
@@ -330,13 +334,11 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric, tick *time.Time) {
 				"Request", metric.Request)
 
 			if len(metric.Request) == 0 {
-				errChan <- errors.New("scrape request not found")
 				level.Error(e.logger).Log("msg", "Error scraping for "+fmt.Sprint(metric.MetricsDesc)+". Did you forget to define request in your toml file?")
 				return
 			}
 
 			if len(metric.MetricsDesc) == 0 {
-				errChan <- errors.New("metricsdesc not found")
 				level.Error(e.logger).Log("msg", "Error scraping for query"+fmt.Sprint(metric.Request)+". Did you forget to define metricsdesc  in your toml file?")
 				return
 			}
@@ -345,7 +347,6 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric, tick *time.Time) {
 				if metricType == "histogram" {
 					_, ok := metric.MetricsBuckets[column]
 					if !ok {
-						errChan <- errors.New("metricsbuckets not found")
 						level.Error(e.logger).Log("msg", "Unable to find MetricsBuckets configuration key for metric. (metric="+column+")")
 						return
 					}
@@ -353,16 +354,18 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric, tick *time.Time) {
 			}
 
 			scrapeStart := time.Now()
-			scrapeError := e.ScrapeMetric(e.db, ch, metric, tick)
-			// Always send the scrapeError, nil or non-nil
-			errChan <- scrapeError
-			if scrapeError != nil {
-				if shouldLogScrapeError(scrapeError, metric.IgnoreZeroResult) {
+			if err1 := e.ScrapeMetric(e.db, ch, metric, tick); err1 != nil {
+				errmutex.Lock()
+				{
+					err = err1
+				}
+				errmutex.Unlock()
+				if shouldLogScrapeError(err, metric.IgnoreZeroResult) {
 					level.Error(e.logger).Log("msg", "Error scraping metric",
 						"Context", metric.Context,
 						"MetricsDesc", fmt.Sprint(metric.MetricsDesc),
 						"time", time.Since(scrapeStart),
-						"error", scrapeError)
+						"error", err)
 				}
 				e.scrapeErrors.WithLabelValues(metric.Context).Inc()
 			} else {
@@ -373,23 +376,7 @@ func (e *Exporter) scrape(ch chan<- prometheus.Metric, tick *time.Time) {
 			}
 		}()
 	}
-
-	e.afterScrape(begun, len(e.metricsToScrape.Metric), errChan)
-}
-
-func (e *Exporter) afterScrape(begun time.Time, countMetrics int, errChan chan error) {
-	// Receive all scrape errors
-	totalErrors := 0.0
-	for i := 0; i < countMetrics; i++ {
-		scrapeError := <-errChan
-		if scrapeError != nil {
-			totalErrors++
-		}
-	}
-	close(errChan)
-
-	e.duration.Set(time.Since(begun).Seconds())
-	e.error.Set(totalErrors)
+	wg.Wait()
 }
 
 func (e *Exporter) connect() error {
@@ -414,23 +401,12 @@ func (e *Exporter) connect() error {
 	// if TNS_ADMIN env var is set, set ConfigDir to that location
 	P.ConfigDir = e.configDir
 
-	switch e.config.DbRole {
-	case "SYSDBA":
-		P.AdminRole = dsn.SysDBA
-	case "SYSOPER":
-		P.AdminRole = dsn.SysOPER
-	case "SYSBACKUP":
-		P.AdminRole = dsn.SysBACKUP
-	case "SYSDG":
-		P.AdminRole = dsn.SysDG
-	case "SYSKM":
-		P.AdminRole = dsn.SysKM
-	case "SYSRAC":
-		P.AdminRole = dsn.SysRAC
-	case "SYSASM":
-		P.AdminRole = dsn.SysASM
-	default:
-		P.AdminRole = dsn.NoRole
+	if strings.ToUpper(e.config.DbRole) == "SYSDBA" {
+		P.IsSysDBA = true
+	}
+
+	if strings.ToUpper(e.config.DbRole) == "SYSOPER" {
+		P.IsSysOper = true
 	}
 
 	level.Debug(e.logger).Log("msg", "connection properties: "+fmt.Sprint(P))
