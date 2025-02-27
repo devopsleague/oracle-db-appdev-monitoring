@@ -13,7 +13,7 @@ IMAGE_NAME     ?= container-registry.oracle.com/database/observability-exporter
 IMAGE_ID       ?= $(IMAGE_NAME):$(VERSION)
 IMAGE_ID_LATEST?= $(IMAGE_NAME):latest
 
-ORACLE_LINUX_BASE_IMAGE ?= ghcr.io/oracle/oraclelinux:8-slim
+ORACLE_LINUX_BASE_IMAGE ?= ghcr.io/oracle/oraclelinux:9-slim
 
 ifeq ($(GOOS), windows)
 EXT?=.exe

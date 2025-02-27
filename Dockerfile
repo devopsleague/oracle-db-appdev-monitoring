@@ -1,5 +1,5 @@
 ARG BASE_IMAGE
-FROM ${BASE_IMAGE:-ghcr.io/oracle/oraclelinux:8-slim} AS build
+FROM ${BASE_IMAGE:-ghcr.io/oracle/oraclelinux:9-slim} AS build
 
 ARG GOOS
 ENV GOOS=${GOOS:-linux}
@@ -8,10 +8,10 @@ ARG GOARCH
 ENV GOARCH=${GOARCH:-amd64}
 
 RUN microdnf install wget gzip gcc && \
-    wget -q https://go.dev/dl/go1.22.7.${GOOS}-${GOARCH}.tar.gz && \
+    wget -q https://go.dev/dl/go1.23.6.${GOOS}-${GOARCH}.tar.gz && \
     rm -rf /usr/local/go && \
-    tar -C /usr/local -xzf go1.22.7.${GOOS}-${GOARCH}.tar.gz && \
-    rm go1.22.7.${GOOS}-${GOARCH}.tar.gz
+    tar -C /usr/local -xzf go1.23.6.${GOOS}-${GOARCH}.tar.gz && \
+    rm go1.23.6.${GOOS}-${GOARCH}.tar.gz
 
 ENV PATH=$PATH:/usr/local/go/bin
 
@@ -42,18 +42,17 @@ ENV GOARCH=${GOARCH:-amd64}
 # second note: moved back to 21c drivers due to adb-s non-root connection issue. for 23ai, change rpm to
 # oracle-instantclient-release-23ai-el8 and paths below s/21/23/
 RUN if [ "$GOARCH" = "amd64" ]; then \
-      microdnf install -y oracle-instantclient-release-el8 && microdnf install -y oracle-instantclient-basic && \
-      microdnf install glibc-2.28-251.0.2.el8_10.4 \
+      microdnf install -y oracle-instantclient-release-23ai-el9 && microdnf install -y oracle-instantclient-basic \
     ; else \
       microdnf install wget libaio && \
       wget https://download.oracle.com/otn_software/linux/instantclient/instantclient-basic-linux-arm64.rpm && \
       rpm -ivh instantclient-basic-linux-arm64.rpm && \
-      ln -s /usr/lib/oracle/19.24 /usr/lib/oracle/21 && \
-      microdnf install glibc-2.28-251.0.2.el8_10.4 \
+      ln -s /usr/lib/oracle/19.24 /usr/lib/oracle/23 && \
+      microdnf install glibc-2.28-251.0.2.el8_10.5 \
     ; fi
 
-ENV LD_LIBRARY_PATH=/usr/lib/oracle/21/client64/lib:usr/lib/oracle/19.24/client64/lib
-ENV PATH=$PATH:/usr/lib/oracle/21/client64/bin:usr/lib/oracle/19.24/client64/bin
+ENV LD_LIBRARY_PATH=/usr/lib/oracle/23/client64/lib:usr/lib/oracle/19.24/client64/lib
+ENV PATH=$PATH:/usr/lib/oracle/23/client64/bin:usr/lib/oracle/19.24/client64/bin
 
 COPY --from=build /go/src/oracledb_exporter/oracle-db-appdev-monitoring /oracledb_exporter
 ADD ./default-metrics.toml /default-metrics.toml
